@@ -2066,7 +2066,13 @@
               [c `(. ~name
                     (~(symbol
                         (core/str "cljs$lang$IFn$_invoke$arity$" c))
-                      ~@(dest-args c)))]))]
+                      ~@(dest-args c)))]))
+          (fn-method [[sig & body :as method]]
+            `(set! (. ~name ~(core/str "-cljs$lang$IFn$_invoke$"
+                               (if (some '#{&} sig)
+                                 "variadic"
+                                 (core/str "arity$" (count sig)))))
+               (fn ~@method)))]
     (core/let [sigs     (map first fdecl)
                variadic (some #(some '#{&} %) sigs)
                sigs     (remove #(some '#{&} %) sigs)
@@ -2087,7 +2093,8 @@
                         argseq#)))
                  `(throw (js/Error.
                            (str "Invalid arity: "
-                             (alength (js-arguments)))))))))))))
+                             (alength (js-arguments)))))))))
+        ~@(map fn-method fdecl)))))
 
 (def
   ^{:doc "Same as (def name (fn [params* ] exprs*)) or (def
