@@ -2074,10 +2074,11 @@
                         (core/str "cljs$lang$IFn$_invoke$arity$" c))
                       ~@(dest-args c)))]))
           (fn-method [[sig & body :as method]]
-            `(set! (. ~name ~(core/str "-cljs$lang$IFn$_invoke$"
-                               (if (some '#{&} sig)
-                                 "variadic"
-                                 (core/str "arity$" (count sig)))))
+            `(set! (. ~name ~(symbol
+                               (core/str "-cljs$lang$IFn$_invoke$"
+                                 (if (some '#{&} sig)
+                                   "variadic"
+                                   (core/str "arity$" (count sig))))))
                (fn ~@method)))]
     (core/let [sigs     (map first fdecl)
                variadic (some #(some '#{&} %) sigs)
@@ -2100,9 +2101,15 @@
                  `(throw (js/Error.
                            (str "Invalid arity: "
                              (alength (js-arguments)))))))))
-        (set! (. ~name (str "-cljs$lang$maxFixedArity")) ~maxfa)
+        (set! (. ~name ~(symbol (core/str "-cljs$lang$maxFixedArity"))) ~maxfa)
         ;; TODO: cljs$lang$applyTo
         ~@(map fn-method fdecl)))))
+
+(comment
+  (require '[clojure.pprint :as pp])
+  (pp/pprint (multi-arity-fn 'foo {} '(([a]) ([a b]))))
+  (pp/pprint (multi-arity-fn 'foo {} '(([a]) ([a b & xs]))))
+  )
 
 (def
   ^{:doc "Same as (def name (fn [params* ] exprs*)) or (def
