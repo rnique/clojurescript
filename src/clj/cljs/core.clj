@@ -74,7 +74,7 @@
 
 (import-macros clojure.core
  [-> ->> .. assert comment cond
-  declare defn defn-
+  declare defn-
   doto
   extend-protocol fn for
   if-let if-not letfn
@@ -82,6 +82,106 @@
   when when-first when-let when-not while
   cond-> cond->> as-> some-> some->>
   if-some when-some])
+
+(defn- ^{:dynamic true} assert-valid-fdecl
+  "A good fdecl looks like (([a] ...) ([a b] ...)) near the end of defn."
+  [fdecl]
+  (when (empty? fdecl) (throw (IllegalArgumentException.
+                                "Parameter declaration missing")))
+  (core/let [argdecls (map
+                   #(if (seq? %)
+                     (first %)
+                     (throw (IllegalArgumentException.
+                              (if (seq? (first fdecl))
+                                (core/str "Invalid signature \""
+                                  %
+                                  "\" should be a list")
+                                (core/str "Parameter declaration \""
+                                  %
+                                  "\" should be a vector")))))
+                   fdecl)
+        bad-args (seq (remove #(vector? %) argdecls))]
+    (when bad-args
+      (throw (IllegalArgumentException.
+               (core/str "Parameter declaration \"" (first bad-args)
+                         "\" should be a vector"))))))
+
+(def
+  ^{:private true}
+  sigs
+  (fn [fdecl]
+    (assert-valid-fdecl fdecl)
+    (core/let [asig
+          (fn [fdecl]
+            (core/let [arglist (first fdecl)
+                  ;elide implicit macro args
+                  arglist (if (clojure.lang.Util/equals '&form (first arglist))
+                            (clojure.lang.RT/subvec arglist 2 (clojure.lang.RT/count arglist))
+                            arglist)
+                  body (next fdecl)]
+              (if (map? (first body))
+                (if (next body)
+                  (with-meta arglist (conj (if (meta arglist) (meta arglist) {}) (first body)))
+                  arglist)
+                arglist)))]
+      (if (seq? (first fdecl))
+        (core/loop [ret [] fdecls fdecl]
+          (if fdecls
+            (recur (conj ret (asig (first fdecls))) (next fdecls))
+            (seq ret)))
+        (core/list (asig fdecl))))))
+
+(def
+  ^{:doc "Same as (def name (fn [params* ] exprs*)) or (def
+    name (fn ([params* ] exprs*)+)) with any doc-string or attrs added
+    to the var metadata. prepost-map defines a map with optional keys
+    :pre and :post that contain collections of pre or post conditions."
+    :arglists '([name doc-string? attr-map? [params*] prepost-map? body]
+                 [name doc-string? attr-map? ([params*] prepost-map? body)+ attr-map?])}
+  defn (fn defn [&form &env name & fdecl]
+         ;; Note: Cannot delegate this check to def because of the call to (with-meta name ..)
+         (if (core/instance? clojure.lang.Symbol name)
+           nil
+           (throw (IllegalArgumentException. "First argument to defn must be a symbol")))
+         (core/let [m (if (core/string? (first fdecl))
+                   {:doc (first fdecl)}
+                   {})
+               fdecl (if (core/string? (first fdecl))
+                       (next fdecl)
+                       fdecl)
+               m (if (map? (first fdecl))
+                   (conj m (first fdecl))
+                   m)
+               fdecl (if (map? (first fdecl))
+                       (next fdecl)
+                       fdecl)
+               fdecl (if (vector? (first fdecl))
+                       (core/list fdecl)
+                       fdecl)
+               m (if (map? (last fdecl))
+                   (conj m (last fdecl))
+                   m)
+               fdecl (if (map? (last fdecl))
+                       (butlast fdecl)
+                       fdecl)
+               m (conj {:arglists (core/list 'quote (sigs fdecl))} m)
+               m (core/let [inline (:inline m)
+                            ifn (first inline)
+                            iname (second inline)]
+                   ;; same as: (if (and (= 'fn ifn) (not (symbol? iname))) ...)
+                   (if (if (clojure.lang.Util/equiv 'fn ifn)
+                         (if (core/instance? clojure.lang.Symbol iname) false true))
+                     ;; inserts the same fn name to the inline fn if it does not have one
+                     (assoc m :inline (cons ifn (cons (clojure.lang.Symbol/intern (.concat (.getName ^clojure.lang.Symbol name) "__inliner"))
+                                                  (next inline))))
+                     m))
+               m (conj (if (meta name) (meta name) {}) m)]
+           (core/list 'def (with-meta name m)
+             ;;todo - restore propagation of fn name
+             ;;must figure out how to convey primitive hints to self calls first
+             (cons `fn fdecl) ))))
+
+(. (var defn) (setMacro))
 
 (defmacro defonce [x init]
   `(when-not (exists? ~x)
