@@ -2057,7 +2057,13 @@
 (defn- multi-arity-fn? [fdecl]
   (core/< 1 (count fdecl)))
 
-(defn multi-arity-fn [name meta fdecl]
+(defn- variadic-fn? [fdecl]
+  (core/and (= (count fdecl))
+            (some '#{&} (ffirst fdecl))))
+
+;; TODO: variadic-fn
+
+(defn- multi-arity-fn [name meta fdecl]
   (letfn [(dest-args [c]
             (map (fn [n] `(aget (js-arguments) ~n))
               (range c)))
@@ -2094,6 +2100,8 @@
                  `(throw (js/Error.
                            (str "Invalid arity: "
                              (alength (js-arguments)))))))))
+        (set! (. ~name (str "-cljs$lang$maxFixedArity")) ~maxfa)
+        ;; TODO: cljs$lang$applyTo
         ~@(map fn-method fdecl)))))
 
 (def
