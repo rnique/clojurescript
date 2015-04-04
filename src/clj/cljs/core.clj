@@ -38,6 +38,7 @@
   (:require clojure.walk
             clojure.set
             cljs.compiler
+            [cljs.util :as util]
             [cljs.env :as env])
   (:import [java.io File]))
 
@@ -2054,7 +2055,39 @@
         `(quote ~form')))))
 
 (defn- multi-arity-fn? [fdecl]
-  (not (vector? (first fdecl))))
+  (core/< 1 (count fdecl)))
+
+(defn multi-arity-fn [name meta fdecl]
+  (letfn [(dest-args [c]
+            (map (fn [n] `(aget (js-arguments) ~n))
+              (range c)))
+          (fixed-arity [sig]
+            (let [c (count sig)]
+              [c `(. ~name
+                    (~(symbol
+                        (core/str "cljs$lang$IFn$_invoke$arity$" c))
+                      ~@(dest-args c)))]))]
+    (core/let [sigs     (map first fdecl)
+               variadic (some #(some '#{&} %) sigs)
+               sigs     (remove #(some '#{&} %) sigs)
+               maxfa    (apply core/max (map count sigs))]
+     `(do
+        (def ~(with-meta name meta)
+          (fn []
+            (case (alength (js-arguments))
+              ~@(mapcat #(fixed-arity %) sigs)
+              ~(if variadic
+                 `(let [argseq# (IndexedSeq.
+                                  (.call js/Array.prototype.slice
+                                    (js-arguments) ~maxfa) 0)]
+                    (. ~name
+                      (~(symbol
+                          (core/str "cljs$lang$IFn$_invoke$arity$variadic"))
+                        ~@(dest-args maxfa)
+                        argseq#)))
+                 `(throw (js/Error.
+                           (str "Invalid arity: "
+                             (alength (js-arguments)))))))))))))
 
 (def
   ^{:doc "Same as (def name (fn [params* ] exprs*)) or (def
