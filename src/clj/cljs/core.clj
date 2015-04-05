@@ -2071,31 +2071,37 @@
             (let [c (count sig)]
               [c `(. ~name
                     (~(symbol
-                        (core/str "cljs$lang$IFn$_invoke$arity$" c))
+                        (core/str "cljs$core$IFn$_invoke$arity$" c))
                       ~@(dest-args c)))]))
           (fn-method [[sig & body :as method]]
             `(set! (. ~name ~(symbol
-                               (core/str "-cljs$lang$IFn$_invoke$"
+                               (core/str "-cljs$core$IFn$_invoke$arity$"
                                  (if (some '#{&} sig)
                                    "variadic"
-                                   (core/str "arity$" (count sig))))))
-               (fn ~@method)))]
-    (core/let [sigs     (map first fdecl)
-               variadic (some #(some '#{&} %) sigs)
-               sigs     (remove #(some '#{&} %) sigs)
+                                   (count sig)))))
+               (fn ~method)))]
+    (core/let [arglists (map first fdecl)
+               variadic (some #(some '#{&} %) arglists)
+               sigs     (remove #(some '#{&} %) arglists)
                maxfa    (apply core/max (map count sigs))]
      `(do
-        (def ~(with-meta name meta)
+        (def ~(with-meta name
+                (assoc meta :top-fn
+                  {:variadic (boolean variadic)
+                   :max-fixed-arity maxfa
+                   :method-params sigs
+                   :arglists arglists
+                   :arglists-meta (doall (map meta arglists))}))
           (fn []
             (case (alength (js-arguments))
               ~@(mapcat #(fixed-arity %) sigs)
               ~(if variadic
-                 `(let [argseq# (IndexedSeq.
+                 `(let [argseq# (new ^::ana/no-resolve cljs.core/IndexedSeq
                                   (.call js/Array.prototype.slice
                                     (js-arguments) ~maxfa) 0)]
                     (. ~name
                       (~(symbol
-                          (core/str "cljs$lang$IFn$_invoke$arity$variadic"))
+                          (core/str "cljs$core$IFn$_invoke$arity$variadic"))
                         ~@(dest-args maxfa)
                         argseq#)))
                  `(throw (js/Error.

@@ -864,16 +864,19 @@
              :impls #{}})
           (when fn-var?
             (let [params (map #(vec (map :name (:params %))) (:methods init-expr))]
-              {:fn-var true
-               ;; protocol implementation context
-               :protocol-impl (:protocol-impl init-expr)
-               ;; inline protocol implementation context
-               :protocol-inline (:protocol-inline init-expr)
-               :variadic (:variadic init-expr)
-               :max-fixed-arity (:max-fixed-arity init-expr)
-               :method-params params
-               :arglists (:arglists sym-meta)
-               :arglists-meta (doall (map meta (:arglists sym-meta)))}) )
+              (merge
+                {:fn-var true
+                 ;; protocol implementation context
+                 :protocol-impl (:protocol-impl init-expr)
+                 ;; inline protocol implementation context
+                 :protocol-inline (:protocol-inline init-expr)}
+                (if-let [top-fn-meta (:top-fn sym-meta)]
+                  top-fn-meta
+                  {:variadic (:variadic init-expr)
+                   :max-fixed-arity (:max-fixed-arity init-expr)
+                   :method-params params
+                   :arglists (:arglists sym-meta)
+                   :arglists-meta (doall (map meta (:arglists sym-meta)))}))) )
           (when (and fn-var? tag)
             {:ret-tag tag})))
       (merge
