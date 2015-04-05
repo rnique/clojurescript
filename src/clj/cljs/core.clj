@@ -2067,9 +2067,9 @@
   (letfn [(dest-args [c]
             (map (fn [n] `(aget (js-arguments) ~n))
               (range c)))
-          (fixed-arity [sig]
+          (fixed-arity [rname sig]
             (let [c (count sig)]
-              [c `(. ~name
+              [c `(. ~rname
                     (~(symbol
                         (core/str "cljs$core$IFn$_invoke$arity$" c))
                       ~@(dest-args c)))]))
@@ -2081,7 +2081,8 @@
                                    (core/str "-cljs$core$IFn$_invoke$arity$"
                                      (count sig))))))
                (fn ~method)))]
-    (core/let [arglists (map first fdecl)
+    (core/let [rname    (symbol (core/str ana/*cljs-ns*) (core/str name))
+               arglists (map first fdecl)
                variadic (boolean (some #(some '#{&} %) arglists))
                sigs     (remove #(some '#{&} %) arglists)
                maxfa    (apply core/max (map count sigs))]
@@ -2095,12 +2096,12 @@
                    :arglists-meta (doall (map meta arglists))}))
           (fn []
             (case (alength (js-arguments))
-              ~@(mapcat #(fixed-arity %) sigs)
+              ~@(mapcat #(fixed-arity rname %) sigs)
               ~(if variadic
                  `(let [argseq# (new ^::ana/no-resolve cljs.core/IndexedSeq
                                   (.call js/Array.prototype.slice
                                     (js-arguments) ~maxfa) 0)]
-                    (. ~name
+                    (. ~rname
                       (~'cljs$core$IFn$_invoke$arity$variadic
                         ~@(dest-args maxfa)
                         argseq#)))
@@ -2172,9 +2173,14 @@
                                                        (next inline))))
                           m))
                     m (conj (if (meta name) (meta name) {}) m)]
-           (core/list 'def (with-meta name m)
-             ;;todo - restore propagation of fn name
-             ;;must figure out how to convey primitive hints to self calls first
-             (cons `fn fdecl) ))))
+           (cond
+             (multi-arity-fn? fdecl)
+             (multi-arity-fn name m fdecl)
+
+             :else
+             (core/list 'def (with-meta name m)
+              ;;todo - restore propagation of fn name
+              ;;must figure out how to convey primitive hints to self calls first
+              (cons `fn fdecl))))))
 
 (. (var defn) (setMacro))
