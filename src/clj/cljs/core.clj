@@ -2075,10 +2075,11 @@
                       ~@(dest-args c)))]))
           (fn-method [[sig & body :as method]]
             `(set! (. ~name ~(symbol
-                               (core/str "-cljs$core$IFn$_invoke$arity$"
+                               (core/str
                                  (if (some '#{&} sig)
-                                   "variadic"
-                                   (count sig)))))
+                                   (core/str "-cljs$lang$fnMethod$variadic")
+                                   (core/str "-cljs$core$IFn$_invoke$arity$"
+                                     (count sig))))))
                (fn ~method)))]
     (core/let [arglists (map first fdecl)
                variadic (boolean (some #(some '#{&} %) arglists))
@@ -2107,10 +2108,18 @@
                            (str "Invalid arity: "
                              (alength (js-arguments)))))))))
         ~@(map fn-method fdecl)
+        ;; optimization properties
         (set! (. ~name ~'-cljs$lang$maxFixedArity) ~maxfa)
         ~(when variadic
-           `(set! (. ~name ~'-cljs$lang$applyTo)
-              (.. ~name ~'-cljs$core$IFn$_invoke$arity$variadic ~'-cljs$lang$applyTo)))))))
+           `(do
+              (set! (. ~name ~'-cljs$core$IFn$_invoke$arity$variadic)
+                (.. ~name
+                  ~'-cljs$lang$fnMethod$variadic
+                  ~'-cljs$core$IFn$_invoke$arity$variadic))
+              (set! (. ~name ~'-cljs$lang$applyTo)
+                (.. ~name
+                  ~'-cljs$lang$fnMethod$variadic
+                  ~'-cljs$lang$applyTo))))))))
 
 (comment
   (require '[clojure.pprint :as pp])
