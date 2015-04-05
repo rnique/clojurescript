@@ -2081,13 +2081,13 @@
                                    (count sig)))))
                (fn ~method)))]
     (core/let [arglists (map first fdecl)
-               variadic (some #(some '#{&} %) arglists)
+               variadic (boolean (some #(some '#{&} %) arglists))
                sigs     (remove #(some '#{&} %) arglists)
                maxfa    (apply core/max (map count sigs))]
      `(do
         (def ~(with-meta name
                 (assoc meta :top-fn
-                  {:variadic (boolean variadic)
+                  {:variadic variadic
                    :max-fixed-arity maxfa
                    :method-params sigs
                    :arglists arglists
@@ -2100,16 +2100,17 @@
                                   (.call js/Array.prototype.slice
                                     (js-arguments) ~maxfa) 0)]
                     (. ~name
-                      (~(symbol
-                          (core/str "cljs$core$IFn$_invoke$arity$variadic"))
+                      (~'cljs$core$IFn$_invoke$arity$variadic
                         ~@(dest-args maxfa)
                         argseq#)))
                  `(throw (js/Error.
                            (str "Invalid arity: "
                              (alength (js-arguments)))))))))
-        (set! (. ~name ~(symbol (core/str "-cljs$lang$maxFixedArity"))) ~maxfa)
-        ;; TODO: cljs$lang$applyTo
-        ~@(map fn-method fdecl)))))
+        ~@(map fn-method fdecl)
+        (set! (. ~name ~'-cljs$lang$maxFixedArity) ~maxfa)
+        ~(when variadic
+           `(set! (. ~name ~'-cljs$lang$applyTo)
+              (.. ~name ~'-cljs$core$IFn$_invoke$arity$variadic ~'-cljs$lang$applyTo)))))))
 
 (comment
   (require '[clojure.pprint :as pp])
