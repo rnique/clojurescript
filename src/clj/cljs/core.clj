@@ -2066,7 +2066,7 @@
     (variadic-fn* sym method nil))
   ([sym [arglist & body :as method] delegate]
    (let [sig (remove '#{&} arglist)
-         restarg (last sig)]
+         restarg (gensym "seq")]
      (letfn [(get-delegate []
                (core/or delegate 'cljs$lang$fnMethod$delegate))
              (get-delegate-prop []
@@ -2076,10 +2076,11 @@
                  ~restarg (^::ana/no-resolve next ~restarg)])
              (apply-to []
                (if (core/< 1 (count sig))
-                 `(fn
-                    ([~restarg]
-                     (let [~@(mapcat param-bind (butlast sig))]
-                       (. ~sym (~(get-delegate) ~@sig)))))
+                 (let [params (repeatedly (core/dec (count sig)) gensym)]
+                   `(fn
+                     ([~restarg]
+                      (let [~@(mapcat param-bind params)]
+                        (. ~sym (~(get-delegate) ~@params ~restarg))))))
                  `(fn
                     ([~restarg]
                      (. ~sym (~(get-delegate) (seq ~restarg)))))))]
@@ -2089,8 +2090,8 @@
           ~@(when-not delegate
               `[(set! (. ~sym ~'-cljs$lang$maxFixedArity) ~(core/dec (count sig)))
                 (set! (. ~sym ~'-cljs$core$IFn$_invoke$arity$variadic)
-                  (. ~sym ~(get-delegate-prop)))
-                (set! (. ~sym ~'-cljs$lang$applyTo) ~(apply-to))]))))))
+                  (. ~sym ~(get-delegate-prop)))])
+          (set! (. ~sym ~'-cljs$lang$applyTo) ~(apply-to)))))))
 
 (defn- variadic-fn [name meta [[arglist & body :as method] :as fdecl]]
   (letfn [(dest-args [c]
@@ -2122,6 +2123,7 @@
   (pp/pprint (variadic-fn 'foo {} '(([& xs]))))
   (pp/pprint (variadic-fn 'foo {} '(([a & xs] xs))))
   (pp/pprint (variadic-fn 'foo {} '(([a b & xs] xs))))
+  (pp/pprint (variadic-fn 'foo {} '(([a [b & cs] & xs] xs))))
   )
 
 (defn- multi-arity-fn [name meta fdecl]
@@ -2135,13 +2137,13 @@
                         (core/str "cljs$core$IFn$_invoke$arity$" c))
                       ~@(dest-args c)))]))
           (fn-method [[sig & body :as method]]
-            `(set! (. ~name ~(symbol
-                               (core/str
-                                 (if (some '#{&} sig)
-                                   (core/str "-cljs$lang$fnMethod$variadic")
-                                   (core/str "-cljs$core$IFn$_invoke$arity$"
-                                     (count sig))))))
-               (fn ~method)))]
+            (if (some '#{&} sig)
+              (variadic-fn* name method 'cljs$lang$fnMethod$variadic)
+              `(set!
+                 (. ~name
+                   ~(symbol (core/str "-cljs$core$IFn$_invoke$arity$"
+                              (count sig))))
+                 (fn ~method))))]
     (core/let [rname    (symbol (core/str ana/*cljs-ns*) (core/str name))
                arglists (map first fdecl)
                variadic (boolean (some #(some '#{&} %) arglists))
@@ -2176,9 +2178,7 @@
         ~(when variadic
            `(do
               (set! (. ~name ~'-cljs$core$IFn$_invoke$arity$variadic)
-                (.. ~name
-                  ~'-cljs$lang$fnMethod$variadic
-                  ~'-cljs$core$IFn$_invoke$arity$variadic))
+                (. ~name ~'-cljs$lang$fnMethod$variadic))
               (set! (. ~name ~'-cljs$lang$applyTo)
                 (.. ~name
                   ~'-cljs$lang$fnMethod$variadic
@@ -2187,7 +2187,8 @@
 (comment
   (require '[clojure.pprint :as pp])
   (pp/pprint (multi-arity-fn 'foo {} '(([a]) ([a b]))))
-  (pp/pprint (multi-arity-fn 'foo {} '(([a]) ([a b & xs]))))
+  (pp/pprint (multi-arity-fn 'foo {} '(([a]) ([a & xs]))))
+  (pp/pprint (multi-arity-fn 'foo {} '(([a]) ([a [b & cs] & xs]))))
   )
 
 (def
