@@ -2058,15 +2058,15 @@
   (core/< 1 (count fdecl)))
 
 (defn- variadic-fn? [fdecl]
-  (core/and (= (count fdecl))
+  (core/and (= 1 (count fdecl))
             (some '#{&} (ffirst fdecl))))
 
 (defn- variadic-fn* [sym [arglist & body :as method]]
   (let [sig (remove '#{&} arglist)
         restarg (last sig)]
     (letfn [(param-bind [param]
-              `[~param (first ~restarg)
-                ~restarg (next ~restarg)])
+              `[~param (^::ana/no-resolve ~restarg)
+                ~restarg (^::ana/no-resolve next ~restarg)])
             (apply-to []
              `(fn
                 ([~restarg]
