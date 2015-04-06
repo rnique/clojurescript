@@ -2068,10 +2068,14 @@
               `[~param (^::ana/no-resolve ~restarg)
                 ~restarg (^::ana/no-resolve next ~restarg)])
             (apply-to []
-             `(fn
-                ([~restarg]
-                 (let [~@(mapcat param-bind (butlast sig))]
-                   (. ~sym (~'cljs$lang$fnMethod$delegate ~@sig))))))]
+              (if (core/< 1 (count sig))
+                `(fn
+                   ([~restarg]
+                    (let [~@(mapcat param-bind (butlast sig))]
+                      (. ~sym (~'cljs$lang$fnMethod$delegate ~@sig)))))
+                `(fn
+                   ([~restarg]
+                    (. ~sym (~'cljs$lang$fnMethod$delegate (seq ~restarg)))))))]
       `(do
          (set! (. ~sym ~'-cljs$lang$fnMethod$delegate)
            (fn (~(vec sig) ~@body)))
