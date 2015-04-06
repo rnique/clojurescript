@@ -2078,8 +2078,7 @@
          (set! (. ~sym ~'-cljs$lang$maxFixedArity) ~(core/dec (count sig)))
          (set! (. ~sym ~'-cljs$core$IFn$_invoke$arity$variadic)
            (. ~sym ~'-cljs$lang$fnMethod$delegate))
-         (set! (. ~sym ~'-cljs$lang$applyTo)
-           ~(apply-to))))))
+         (set! (. ~sym ~'-cljs$lang$applyTo) ~(apply-to))))))
 
 (defn- variadic-fn [name meta [[arglist & body :as method] :as fdecl]]
   (letfn [(dest-args [c]
@@ -2102,7 +2101,7 @@
                              (.call js/Array.prototype.slice
                                (js-arguments) ~c-1) 0)]
                (. ~rname
-                 (cljs$lang$fnMethod$delegate ~@(dest-args c-1) argseq#)))))
+                 (~'cljs$lang$fnMethod$delegate ~@(dest-args c-1) argseq#)))))
          ~(variadic-fn* rname method)))))
 
 (comment
