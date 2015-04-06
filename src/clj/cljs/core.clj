@@ -2101,9 +2101,10 @@
       `(do
          (def ~(with-meta name meta)
            (fn []
-             (let [argseq# (new ^::ana/no-resolve cljs.core/IndexedSeq
-                             (.call js/Array.prototype.slice
-                               (js-arguments) ~c-1) 0)]
+             (let [argseq# (when (< ~c-1 (alength (js-arguments)))
+                             (new ^::ana/no-resolve cljs.core/IndexedSeq
+                              (.call js/Array.prototype.slice
+                                (js-arguments) ~c-1) 0))]
                (. ~rname
                  (~'cljs$lang$fnMethod$delegate ~@(dest-args c-1) argseq#)))))
          ~(variadic-fn* rname method)))))
@@ -2229,6 +2230,9 @@
            (cond
              (multi-arity-fn? fdecl)
              (multi-arity-fn name m fdecl)
+
+             (variadic-fn? fdecl)
+             (variadic-fn name m fdecl)
 
              :else
              (core/list 'def (with-meta name m)
