@@ -2061,7 +2061,56 @@
   (core/and (= (count fdecl))
             (some '#{&} (ffirst fdecl))))
 
-;; TODO: variadic-fn
+(defn- variadic-fn* [sym [arglist & body :as method]]
+  (let [sig (remove '#{&} arglist)
+        restarg (last sig)]
+    (letfn [(param-bind [param]
+              `[~param (first ~restarg)
+                ~restarg (next ~restarg)])
+            (apply-to []
+             `(fn
+                ([~restarg]
+                 (let [~@(mapcat param-bind (butlast sig))]
+                   (. ~sym (cljs$lang$fnMethod$delegate ~@sig))))))]
+      `(do
+         (set! (. ~sym ~'-cljs$lang$fnMethod$delegate)
+           (fn (~(vec sig) ~@body)))
+         (set! (. ~sym ~'-cljs$lang$maxFixedArity) 0)
+         (set! (. ~sym ~'-cljs$core$IFn$_invoke$arity$variadic)
+           (. ~sym ~'-cljs$lang$fnMethod$delegate))
+         (set! (. ~sym ~'-cljs$lang$applyTo)
+           ~(apply-to))))))
+
+(defn- variadic-fn [name meta [[arglist & body :as method] :as fdecl]]
+  (letfn [(dest-args [c]
+            (map (fn [n] `(aget (js-arguments) ~n))
+              (range c)))]
+    (core/let [rname (symbol (core/str ana/*cljs-ns*) (core/str name))
+               sig   (remove '#{&} arglist)
+               c-1   (core/dec (count sig))
+               meta  (assoc meta
+                       :top-fn
+                       {:variadic true
+                        :max-fixed-arity c-1
+                        :method-params [sig]
+                        :arglists [arglist]
+                        :arglists-meta (doall (map meta [arglist]))})]
+      `(do
+         (def ~(with-meta name meta)
+           (fn []
+             (let [argseq# (new ^::ana/no-resolve cljs.core/IndexedSeq
+                             (.call js/Array.prototype.slice
+                               (js-arguments) ~c-1) 0)]
+               (. ~rname
+                 (cljs$lang$fnMethod$delegate ~@(dest-args c-1) argseq#)))))
+         ~(variadic-fn* rname method)))))
+
+(comment
+  (require '[clojure.pprint :as pp])
+  (pp/pprint (variadic-fn 'foo {} '(([& xs]))))
+  (pp/pprint (variadic-fn 'foo {} '(([a & xs] xs))))
+  (pp/pprint (variadic-fn 'foo {} '(([a b & xs] xs))))
+  )
 
 (defn- multi-arity-fn [name meta fdecl]
   (letfn [(dest-args [c]
@@ -2085,15 +2134,16 @@
                arglists (map first fdecl)
                variadic (boolean (some #(some '#{&} %) arglists))
                sigs     (remove #(some '#{&} %) arglists)
-               maxfa    (apply core/max (map count sigs))]
+               maxfa    (apply core/max (map count sigs))
+               meta     (assoc meta
+                          :top-fn
+                          {:variadic variadic
+                           :max-fixed-arity maxfa
+                           :method-params sigs
+                           :arglists arglists
+                           :arglists-meta (doall (map meta arglists))})]
      `(do
-        (def ~(with-meta name
-                (assoc meta :top-fn
-                  {:variadic variadic
-                   :max-fixed-arity maxfa
-                   :method-params sigs
-                   :arglists arglists
-                   :arglists-meta (doall (map meta arglists))}))
+        (def ~(with-meta name meta)
           (fn []
             (case (alength (js-arguments))
               ~@(mapcat #(fixed-arity rname %) sigs)
