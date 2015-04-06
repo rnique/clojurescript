@@ -584,12 +584,6 @@
                (emitln "return " mname ";")
                (emitln "})()"))))
 
-(defn top-multi-arity-fn? [{:keys [name env methods] :as ast}]
-  (and name (not= :return (:context env)) (< 1 (count methods))))
-
-(defn fn-name->symbol [{name :name {:keys [ns]} :info}]
-  (symbol (str ns) (str name)))
-
 (defmethod emit* :fn
   [{:keys [name env methods max-fixed-arity variadic recur-frames loop-lets]}]
   ;;fn statements get erased, serve no purpose and can pollute scope if named
