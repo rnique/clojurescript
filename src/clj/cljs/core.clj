@@ -2075,7 +2075,7 @@
       `(do
          (set! (. ~sym ~'-cljs$lang$fnMethod$delegate)
            (fn (~(vec sig) ~@body)))
-         (set! (. ~sym ~'-cljs$lang$maxFixedArity) 0)
+         (set! (. ~sym ~'-cljs$lang$maxFixedArity) ~(core/dec (count sig)))
          (set! (. ~sym ~'-cljs$core$IFn$_invoke$arity$variadic)
            (. ~sym ~'-cljs$lang$fnMethod$delegate))
          (set! (. ~sym ~'-cljs$lang$applyTo)
