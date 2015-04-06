@@ -2071,7 +2071,7 @@
              `(fn
                 ([~restarg]
                  (let [~@(mapcat param-bind (butlast sig))]
-                   (. ~sym (cljs$lang$fnMethod$delegate ~@sig))))))]
+                   (. ~sym (~'cljs$lang$fnMethod$delegate ~@sig))))))]
       `(do
          (set! (. ~sym ~'-cljs$lang$fnMethod$delegate)
            (fn (~(vec sig) ~@body)))
