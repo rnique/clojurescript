@@ -2065,7 +2065,7 @@
   (let [sig (remove '#{&} arglist)
         restarg (last sig)]
     (letfn [(param-bind [param]
-              `[~param (^::ana/no-resolve ~restarg)
+              `[~param (^::ana/no-resolve first ~restarg)
                 ~restarg (^::ana/no-resolve next ~restarg)])
             (apply-to []
               (if (core/< 1 (count sig))
