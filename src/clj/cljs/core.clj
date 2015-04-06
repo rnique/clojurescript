@@ -2061,28 +2061,36 @@
   (core/and (= 1 (count fdecl))
             (some '#{&} (ffirst fdecl))))
 
-(defn- variadic-fn* [sym [arglist & body :as method]]
-  (let [sig (remove '#{&} arglist)
-        restarg (last sig)]
-    (letfn [(param-bind [param]
-              `[~param (^::ana/no-resolve first ~restarg)
-                ~restarg (^::ana/no-resolve next ~restarg)])
-            (apply-to []
-              (if (core/< 1 (count sig))
-                `(fn
-                   ([~restarg]
-                    (let [~@(mapcat param-bind (butlast sig))]
-                      (. ~sym (~'cljs$lang$fnMethod$delegate ~@sig)))))
-                `(fn
-                   ([~restarg]
-                    (. ~sym (~'cljs$lang$fnMethod$delegate (seq ~restarg)))))))]
-      `(do
-         (set! (. ~sym ~'-cljs$lang$fnMethod$delegate)
-           (fn (~(vec sig) ~@body)))
-         (set! (. ~sym ~'-cljs$lang$maxFixedArity) ~(core/dec (count sig)))
-         (set! (. ~sym ~'-cljs$core$IFn$_invoke$arity$variadic)
-           (. ~sym ~'-cljs$lang$fnMethod$delegate))
-         (set! (. ~sym ~'-cljs$lang$applyTo) ~(apply-to))))))
+(defn- variadic-fn*
+  ([sym method]
+    (variadic-fn* sym method nil))
+  ([sym [arglist & body :as method] delegate]
+   (let [sig (remove '#{&} arglist)
+         restarg (last sig)]
+     (letfn [(get-delegate []
+               (core/or delegate 'cljs$lang$fnMethod$delegate))
+             (get-delegate-prop []
+               (symbol (core/str "-" (get-delegate))))
+             (param-bind [param]
+               `[~param (^::ana/no-resolve first ~restarg)
+                 ~restarg (^::ana/no-resolve next ~restarg)])
+             (apply-to []
+               (if (core/< 1 (count sig))
+                 `(fn
+                    ([~restarg]
+                     (let [~@(mapcat param-bind (butlast sig))]
+                       (. ~sym (~(get-delegate) ~@sig)))))
+                 `(fn
+                    ([~restarg]
+                     (. ~sym (~(get-delegate) (seq ~restarg)))))))]
+       `(do
+          (set! (. ~sym ~(get-delegate-prop))
+            (fn (~(vec sig) ~@body)))
+          ~@(when-not delegate
+              `[(set! (. ~sym ~'-cljs$lang$maxFixedArity) ~(core/dec (count sig)))
+                (set! (. ~sym ~'-cljs$core$IFn$_invoke$arity$variadic)
+                  (. ~sym ~(get-delegate-prop)))
+                (set! (. ~sym ~'-cljs$lang$applyTo) ~(apply-to))]))))))
 
 (defn- variadic-fn [name meta [[arglist & body :as method] :as fdecl]]
   (letfn [(dest-args [c]
